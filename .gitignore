@@ -20,6 +20,19 @@
 # production
 /build
 
+# local Claude context (personal/private)
+CLAUDE.local.md
+
+# personal candidate profile (copy candidateProfile.example.js → candidateProfile.js and fill in)
+src/utils/candidateProfile.js
+
+# AI scoring cache and personal job statuses — regenerated/local only
+data/scores.json
+data/statuses.json
+
+# local Claude memory/context
+.claude/
+
 # misc
 .DS_Store
 *.pem
@@ -32,6 +45,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
+
 
 # vercel
 .vercel
