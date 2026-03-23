@@ -2,21 +2,17 @@
 // GET /api/status  — returns all saved statuses
 // POST /api/status — body: { id, status } — updates one job's status
 
-import { promises as fs } from 'fs'
 import path from 'path'
+import { readJson, writeJson } from '@/utils/storage'
 
 const STATUS_PATH = path.join(process.cwd(), 'data', 'statuses.json')
 
 async function load() {
-  try {
-    return JSON.parse(await fs.readFile(STATUS_PATH, 'utf-8'))
-  } catch {
-    return {}
-  }
+  return readJson('jobradar:statuses', STATUS_PATH)
 }
 
 async function save(data) {
-  await fs.writeFile(STATUS_PATH, JSON.stringify(data, null, 2), 'utf-8')
+  await writeJson('jobradar:statuses', STATUS_PATH, data)
 }
 
 export async function GET() {
