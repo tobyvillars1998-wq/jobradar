@@ -3,8 +3,8 @@
 // Fetches all jobs, pre-filters them, scores each one with Claude Haiku,
 // caches results to data/scores.json, and returns jobs sorted by score.
 
+import { promises as fs } from 'fs'
 import path from 'path'
-import { readJson, writeJson } from '@/utils/storage'
 import { fetchRemoteOK } from '@/api/fetchRemoteOK'
 import { fetchArbeitnow } from '@/api/fetchArbeitnow'
 import { fetchJobicy } from '@/api/fetchJobicy'
@@ -111,9 +111,14 @@ async function scoreInBatches(jobs) {
 }
 
 async function loadCache() {
-  return readJson('jobradar:scores', CACHE_PATH)
+  try {
+    const raw = await fs.readFile(CACHE_PATH, 'utf-8')
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
 }
 
 async function saveCache(cache) {
-  await writeJson('jobradar:scores', CACHE_PATH, cache)
+  await fs.writeFile(CACHE_PATH, JSON.stringify(cache, null, 2), 'utf-8')
 }

@@ -20,7 +20,7 @@ Built as both a daily-use personal tool and a portfolio project demonstrating AI
 - **Tailwind CSS v4**
 - **Anthropic Claude API** — `claude-haiku-4-5-20251001` for AI scoring
 - **axios** for external API requests
-- Local JSON file storage (`data/scores.json`, `data/statuses.json`) in dev; **Upstash Redis** in production
+- Local JSON file storage (`data/scores.json`, `data/statuses.json`)
 - Deployable to **Vercel**
 
 ## Job Sources
@@ -84,26 +84,6 @@ Open [http://localhost:3000](http://localhost:3000). On first load it fetches an
 - **Status tracking** — Saved / Applied / Skipped with optimistic UI updates
 - **Refresh button** — re-fetches jobs and statuses without a page reload
 
-## Deploying to Vercel (with persistent remote storage)
+## Deploying to Vercel
 
-The app uses a storage abstraction that switches automatically between local JSON files (dev) and Upstash Redis (production). Setting up Upstash gives you persistent scores and statuses that survive redeployments and are accessible from anywhere.
-
-### 1. Create a free Upstash Redis database
-
-Go to [console.upstash.com](https://console.upstash.com), create a free Redis database, and copy the **REST URL** and **REST Token** from the database details page.
-
-### 2. Set environment variables
-
-Add these to your `.env.local` for local testing, and to your Vercel project's **Settings → Environment Variables** for production:
-
-```
-ANTHROPIC_API_KEY=your_anthropic_key
-UPSTASH_REDIS_REST_URL=https://your-db.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your_token_here
-```
-
-### 3. Deploy
-
-Push to GitHub and import the repo in [vercel.com/new](https://vercel.com/new). Vercel auto-detects Next.js — no extra configuration needed.
-
-> **Local dev without Upstash:** If the Upstash env vars are absent, the app falls back to `data/scores.json` and `data/statuses.json` as before — no changes to your local workflow.
+Set `ANTHROPIC_API_KEY` as an environment variable in your Vercel project settings, then push to GitHub and import the repo. Note: the `data/` folder is local-only — statuses and score cache won't persist across Vercel deployments without migrating to a database (Supabase planned).
