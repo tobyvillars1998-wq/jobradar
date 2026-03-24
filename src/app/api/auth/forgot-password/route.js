@@ -1,11 +1,18 @@
 import nodemailer from 'nodemailer'
 import { getServiceClient } from '@/lib/supabase'
+import { rateLimit } from '@/lib/rateLimit'
 
 export async function POST(req) {
   const { email } = await req.json()
 
-  if (!email) {
+  if (!email || typeof email !== 'string') {
     return Response.json({ error: 'Email is required' }, { status: 400 })
+  }
+
+  // 3 requests per email per 15 minutes — prevents using this endpoint to spam inboxes
+  const { limited } = rateLimit(`forgot:${email.toLowerCase()}`, 3, 15 * 60 * 1000)
+  if (limited) {
+    return Response.json({ ok: true }) // still return ok — don't reveal rate limiting
   }
 
   const supabase = getServiceClient()

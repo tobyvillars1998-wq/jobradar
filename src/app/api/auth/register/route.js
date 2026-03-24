@@ -1,11 +1,40 @@
 import bcrypt from 'bcryptjs'
 import { getServiceClient } from '@/lib/supabase'
+import { rateLimit } from '@/lib/rateLimit'
 
 export async function POST(req) {
   const { name, email, password } = await req.json()
 
   if (!name || !email || !password) {
     return Response.json({ error: 'All fields are required' }, { status: 400 })
+  }
+
+  if (typeof name !== 'string' || name.trim().length > 100) {
+    return Response.json({ error: 'Invalid name' }, { status: 400 })
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (typeof email !== 'string' || !emailRegex.test(email.trim())) {
+    return Response.json({ error: 'Invalid email address' }, { status: 400 })
+  }
+
+  if (
+    typeof password !== 'string' ||
+    password.length < 8 ||
+    !/[a-zA-Z]/.test(password) ||
+    !/[0-9]/.test(password)
+  ) {
+    return Response.json(
+      { error: 'Password must be at least 8 characters with a letter and a number' },
+      { status: 400 }
+    )
+  }
+
+  // 5 registrations per IP per hour to limit account-creation spam
+  const ip = req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown'
+  const { limited } = rateLimit(`register:${ip}`, 5, 60 * 60 * 1000)
+  if (limited) {
+    return Response.json({ error: 'Too many requests. Try again later.' }, { status: 429 })
   }
 
   const supabase = getServiceClient()
@@ -30,13 +59,19 @@ export async function POST(req) {
   }
 
   // Create a blank profile for the new user so it exists when they first log in
-  await supabase.from('profiles').insert({
+  const { error: profileError } = await supabase.from('profiles').insert({
     id: user.id,
     name: user.name,
     target_roles: [],
     skills: [],
     deal_breakers: [],
   })
+
+  if (profileError) {
+    // Roll back the user row so there's no orphaned account with no profile
+    await supabase.from('users').delete().eq('id', user.id)
+    return Response.json({ error: 'Failed to create account. Please try again.' }, { status: 500 })
+  }
 
   return Response.json({ ok: true })
 }

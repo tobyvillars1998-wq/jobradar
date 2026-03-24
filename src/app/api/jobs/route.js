@@ -3,12 +3,15 @@
 // The aggregator. Calls all four sources in parallel, merges the results,
 // and removes duplicate jobs that appear on more than one board.
 
+import { getServerSession } from 'next-auth'
 import { fetchRemoteOK } from '@/api/fetchRemoteOK'
 import { fetchArbeitnow } from '@/api/fetchArbeitnow'
 import { fetchJobicy } from '@/api/fetchJobicy'
 import { fetchHimalayas } from '@/api/fetchHimalayas'
 
 export async function GET() {
+  const session = await getServerSession()
+  if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   // Run all four fetchers at the same time instead of one after another.
   // Promise.allSettled waits for all of them to finish regardless of whether
   // any individual one fails — so one broken API won't wipe out the others.

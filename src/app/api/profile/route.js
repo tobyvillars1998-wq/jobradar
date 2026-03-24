@@ -52,6 +52,15 @@ export async function PATCH(req) {
     return Response.json({ error: 'Name and email are required' }, { status: 400 })
   }
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email.trim())) {
+    return Response.json({ error: 'Invalid email address' }, { status: 400 })
+  }
+
+  // Ensure array fields contain only short strings — prevents garbage data in the DB
+  const sanitizeArray = (val) =>
+    Array.isArray(val) ? val.filter((s) => typeof s === 'string').map((s) => s.trim().slice(0, 200)) : []
+
   const supabase = getServiceClient()
 
   const { data: user, error: userError } = await supabase
@@ -86,11 +95,11 @@ export async function PATCH(req) {
       .upsert({
         id: user.id,
         name: name.trim(),
-        target_roles: targetRoles || [],
-        skills: skills || [],
-        deal_breakers: dealBreakers || [],
-        min_salary: minSalary || null,
-        location: location || [],
+        target_roles: sanitizeArray(targetRoles),
+        skills: sanitizeArray(skills),
+        deal_breakers: sanitizeArray(dealBreakers),
+        min_salary: typeof minSalary === 'number' && minSalary >= 0 ? minSalary : null,
+        location: sanitizeArray(location),
       }),
   ])
 
