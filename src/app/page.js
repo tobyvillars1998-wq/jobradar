@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { signOut } from 'next-auth/react'
 import JobCard from '@/components/JobCard'
 
-const SOURCES = ['all', 'remoteok', 'himalayas', 'jobicy', 'arbeitnow']
+const SOURCES = ['all', 'remoteok', 'himalayas', 'jobicy', 'arbeitnow', 'github']
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState([])
