@@ -4,12 +4,11 @@
 // Called by the /api/score route — not used directly.
 
 import Anthropic from '@anthropic-ai/sdk'
-import candidateProfile from '@/utils/candidateProfile'
 
 const client = new Anthropic()
 
-export async function scoreJob(job) {
-  const prompt = buildPrompt(job)
+export async function scoreJob(job, profile) {
+  const prompt = buildPrompt(job, profile)
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -20,7 +19,7 @@ export async function scoreJob(job) {
   return parseResponse(message.content[0].text)
 }
 
-function buildPrompt(job) {
+function buildPrompt(job, profile) {
   const salaryLine = job.salary
     ? `Salary: $${job.salary.min ?? '?'} – $${job.salary.max ?? '?'} ${job.salary.currency ?? ''}`
     : 'Salary: not listed'
@@ -30,13 +29,17 @@ function buildPrompt(job) {
   // Truncate description to keep tokens low
   const description = (job.description ?? '').slice(0, 800)
 
+  const locationLine = Array.isArray(profile.location)
+    ? profile.location.join(', ')
+    : profile.location || 'Remote'
+
   return `You are a job-fit evaluator. Score how well this job matches the candidate profile below.
 
 ## Candidate Profile
-- Target roles: ${candidateProfile.targetRoles.join(', ')}
-- Skills: ${candidateProfile.skills.join(', ')}
-- Minimum salary: $${candidateProfile.salary.min} ${candidateProfile.salary.currency}
-- Location preference: ${candidateProfile.location.preferred}
+- Target roles: ${profile.targetRoles.join(', ')}
+- Skills: ${profile.skills.join(', ')}
+- Minimum salary: $${profile.minSalary ?? 0} USD
+- Location preference: ${locationLine}
 
 ## Job Listing
 - Title: ${job.title}

@@ -36,8 +36,18 @@ function formatDate(iso) {
   }
 }
 
-export default function JobCard({ job, onStatusChange }) {
+export default function JobCard({ job, onStatusChange, onAddSkill }) {
   const [expanded, setExpanded] = useState(false)
+  const [addedSkills, setAddedSkills] = useState(new Set())
+
+  async function handleAddSkill(skill) {
+    setAddedSkills(prev => new Set(prev).add(skill))
+    try {
+      await onAddSkill(skill)
+    } catch {
+      setAddedSkills(prev => { const next = new Set(prev); next.delete(skill); return next })
+    }
+  }
   const salary = formatSalary(job.salary)
   const date = formatDate(job.postedAt)
 
@@ -81,7 +91,18 @@ export default function JobCard({ job, onStatusChange }) {
             <span key={skill} className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">{skill}</span>
           ))}
           {job.missingSkills?.map(skill => (
-            <span key={skill} className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">{skill}</span>
+            <span key={skill} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
+              {skill}
+              {onAddSkill && (
+                addedSkills.has(skill)
+                  ? <span className="text-green-600 font-bold leading-none">✓</span>
+                  : <button
+                      onClick={() => handleAddSkill(skill)}
+                      className="leading-none font-bold hover:text-red-900 transition-colors"
+                      title="Add to my skills"
+                    >+</button>
+              )}
+            </span>
           ))}
         </div>
       )}
