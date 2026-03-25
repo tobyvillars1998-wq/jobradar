@@ -16,19 +16,13 @@ import { RELEVANT_TAGS, DEAL_BREAKERS } from '@/utils/filters'
 // Each entry tells the fetcher where to find job data and how to parse it.
 
 const GITHUB_REPOS = [
-  {
-    id: 'remoteintech',
-    owner: 'remoteintech',
-    repo: 'remote-jobs',
-    // This repo has a structured CSV with company + profile URL + HQ + description
-    path: 'README.md',
-    parser: parseRemoteIntech,
-  },
+  // remoteintech/remote-jobs removed — repo restructured to per-company .md files
+  // in src/companies/, requires many API calls per run. Re-add once GITHUB_TOKEN is set.
   {
     id: 'hiringwow',
     owner: 'poteto',
     repo: 'hiring-without-whiteboards',
-    // Markdown table: | Company | Region | Tech stack | Funding |
+    // Rows format: [Company](url) | Region | Tech stack | (no leading pipe)
     path: 'README.md',
     parser: parseHiringWoW,
   },
@@ -51,11 +45,12 @@ export async function fetchGitHub() {
   )
 
   const allJobs = []
-  for (const result of results) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i]
     if (result.status === 'fulfilled') {
       allJobs.push(...result.value)
     } else {
-      console.error('[fetchGitHub] A repo fetch failed:', result.reason?.message)
+      console.error('[fetchGitHub] A repo fetch failed:', results[i].reason?.message)
     }
   }
 
@@ -66,7 +61,6 @@ export async function fetchGitHub() {
 
 async function fetchRepo(repoDef, headers) {
   const url = `https://api.github.com/repos/${repoDef.owner}/${repoDef.repo}/contents/${repoDef.path}`
-
   const response = await axios.get(url, { headers })
 
   // GitHub returns base64-encoded content when Accept is application/vnd.github.v3+json,
@@ -132,13 +126,9 @@ function parseRemoteIntech(markdown, sourceId) {
 function parseHiringWoW(markdown, sourceId) {
   const jobs = []
 
-  // Match both linked and plain company names in table rows
-  // Linked: | [Company](url) | ...
-  // Plain:  | Company Name   | ...
-  const linkedRowRegex = /^\|\s*\[(.+?)\]\((https?:\/\/[^\)]+)\)\s*\|(.+)$/gm
-  const plainRowRegex  = /^\|\s*([^\[|][^|]*?)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|/gm
+  // Rows are markdown list items: - [Company](url) | Region | Description
+  const linkedRowRegex = /^- \[(.+?)\]\((https?:\/\/[^\)]+)\)\s*\|(.+)$/gm
 
-  // Prefer linked rows (have an apply URL)
   let match
   while ((match = linkedRowRegex.exec(markdown)) !== null) {
     const company = match[1].trim()
