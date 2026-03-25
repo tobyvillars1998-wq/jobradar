@@ -1,30 +1,29 @@
 // src/app/api/score/route.js  →  GET /api/score
 //
 // Fetches all jobs, pre-filters them, scores each one with Claude Haiku,
-// caches results to data/scores.json, and returns jobs sorted by score.
+// caches results to Supabase scores table, and returns jobs sorted by score.
 
-import { promises as fs } from 'fs'
-import path from 'path'
 import { getServerSession } from 'next-auth'
 import { fetchRemoteOK } from '@/api/fetchRemoteOK'
 import { fetchArbeitnow } from '@/api/fetchArbeitnow'
 import { fetchJobicy } from '@/api/fetchJobicy'
 import { fetchHimalayas } from '@/api/fetchHimalayas'
+import { fetchGitHub } from '@/api/fetchGitHub'
 import { scoreJob } from '@/utils/scoreJob'
 import { getServiceClient } from '@/lib/supabase'
 
-const CACHE_PATH = path.join(process.cwd(), 'data', 'scores.json')
 const BATCH_SIZE = 5
 
 export async function GET() {
   // ── 0. Load user profile ───────────────────────────────────────────────────
-  const profile = await getUserProfile()
-  if (!profile) {
+  const profileData = await getUserProfile()
+  if (!profileData) {
     return Response.json(
       { error: 'Your profile is incomplete. Please add your skills and target roles in the Profile page before searching for jobs.' },
       { status: 400 }
     )
   }
+  const { userId, profile } = profileData
 
   // ── 1. Fetch all jobs ──────────────────────────────────────────────────────
   const results = await Promise.allSettled([
@@ -32,6 +31,7 @@ export async function GET() {
     fetchArbeitnow(),
     fetchJobicy(),
     fetchHimalayas(),
+    fetchGitHub(),
   ])
 
   const allJobs = []
@@ -50,18 +50,18 @@ export async function GET() {
   // ── 2. Pre-filter — keyword pass before touching Claude ────────────────────
   const candidates = preFilter(jobs, profile)
 
-  // ── 3. Load cache ──────────────────────────────────────────────────────────
-  const cache = await loadCache()
+  // ── 3. Load cache from Supabase ────────────────────────────────────────────
+  const cache = await loadCache(userId)
 
   // ── 4. Score only uncached jobs ────────────────────────────────────────────
   const uncached = candidates.filter(job => !cache[job.id])
 
   if (uncached.length > 0) {
     const scored = await scoreInBatches(uncached, profile)
+    await saveCache(scored, userId)
     for (const { id, result } of scored) {
       cache[id] = result
     }
-    await saveCache(cache)
   }
 
   // ── 5. Merge scores onto job objects ───────────────────────────────────────
@@ -92,7 +92,6 @@ function preFilter(jobs, profile) {
 
   return jobs.filter(job => {
     const text = [job.title, job.description, ...job.tags].join(' ').toLowerCase()
-
     if (dealBreakers.some(d => text.includes(d))) return false
     return targetKeywords.some(k => text.includes(k))
   })
@@ -120,21 +119,43 @@ async function scoreInBatches(jobs, profile) {
   return results
 }
 
-async function loadCache() {
-  try {
-    const raw = await fs.readFile(CACHE_PATH, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return {}
+async function loadCache(userId) {
+  const { data } = await getServiceClient()
+    .from('scores')
+    .select('job_id, score, reasoning, matching_skills, missing_skills')
+    .eq('user_id', userId)
+
+  const cache = {}
+  for (const row of data ?? []) {
+    cache[row.job_id] = {
+      score: row.score,
+      reasoning: row.reasoning,
+      matchingSkills: row.matching_skills ?? [],
+      missingSkills: row.missing_skills ?? [],
+    }
   }
+  return cache
 }
 
-async function saveCache(cache) {
-  await fs.writeFile(CACHE_PATH, JSON.stringify(cache, null, 2), 'utf-8')
+async function saveCache(scored, userId) {
+  if (!scored.length) return
+  const rows = scored.map(({ id, result }) => ({
+    user_id: userId,
+    job_id: id,
+    score: result.score,
+    reasoning: result.reasoning,
+    matching_skills: result.matchingSkills ?? [],
+    missing_skills: result.missingSkills ?? [],
+    scored_at: new Date().toISOString(),
+  }))
+  const { error } = await getServiceClient()
+    .from('scores')
+    .upsert(rows, { onConflict: 'user_id,job_id' })
+  if (error) console.error('saveCache error:', error.message, error.details, error.hint)
 }
 
 // Fetch the logged-in user's profile from Supabase.
-// Returns the profile object or null if unavailable.
+// Returns { userId, profile } or null if unavailable/incomplete.
 async function getUserProfile() {
   const session = await getServerSession()
   if (!session?.user?.email) return null
@@ -159,10 +180,13 @@ async function getUserProfile() {
   if (!p || (!p.target_roles?.length && !p.skills?.length)) return null
 
   return {
-    targetRoles: p.target_roles || [],
-    skills: p.skills || [],
-    dealBreakers: p.deal_breakers || [],
-    minSalary: p.min_salary || 0,
-    location: p.location || ['Remote'],
+    userId: user.id,
+    profile: {
+      targetRoles: p.target_roles || [],
+      skills: p.skills || [],
+      dealBreakers: p.deal_breakers || [],
+      minSalary: p.min_salary || 0,
+      location: p.location || ['Remote'],
+    },
   }
 }

@@ -4,12 +4,12 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { signOut } from 'next-auth/react'
 import JobCard from '@/components/JobCard'
 
-const SOURCES = ['all', 'remoteok', 'himalayas', 'jobicy', 'arbeitnow']
+const SOURCES = ['all', 'remoteok', 'himalayas', 'jobicy', 'arbeitnow', 'github']
 
 export default function Dashboard() {
   const [jobs, setJobs] = useState([])
   const [statuses, setStatuses] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
 
@@ -44,6 +44,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    setLoading(true)
     Promise.all([fetchJobs(), fetchStatuses()])
       .then(([jobs, statuses]) => {
         setJobs(jobs)

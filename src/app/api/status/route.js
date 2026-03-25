@@ -1,29 +1,39 @@
 // src/app/api/status/route.js
-// GET /api/status  — returns all saved statuses
+// GET /api/status  — returns all saved statuses for the logged-in user
 // POST /api/status — body: { id, status } — updates one job's status
 
 import { getServerSession } from 'next-auth'
-import { promises as fs } from 'fs'
-import path from 'path'
+import { getServiceClient } from '@/lib/supabase'
 
-const STATUS_PATH = path.join(process.cwd(), 'data', 'statuses.json')
+const VALID_STATUSES = ['new', 'saved', 'applied', 'skipped']
 
-async function load() {
-  try {
-    return JSON.parse(await fs.readFile(STATUS_PATH, 'utf-8'))
-  } catch {
-    return {}
-  }
+async function getUserId(email) {
+  const { data } = await getServiceClient()
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single()
+  return data?.id ?? null
 }
 
-async function save(data) {
-  await fs.writeFile(STATUS_PATH, JSON.stringify(data, null, 2), 'utf-8')
+async function getStatusMap(userId) {
+  const { data } = await getServiceClient()
+    .from('statuses')
+    .select('job_id, status')
+    .eq('user_id', userId)
+  const map = {}
+  for (const row of data ?? []) map[row.job_id] = row.status
+  return map
 }
 
 export async function GET() {
   const session = await getServerSession()
   if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  return Response.json(await load())
+
+  const userId = await getUserId(session.user.email)
+  if (!userId) return Response.json({ error: 'User not found' }, { status: 404 })
+
+  return Response.json(await getStatusMap(userId))
 }
 
 export async function POST(request) {
@@ -31,23 +41,20 @@ export async function POST(request) {
   if (!session?.user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id, status } = await request.json()
-  if (!id || !status) {
-    return Response.json({ error: 'id and status are required' }, { status: 400 })
-  }
+  if (!id || !status) return Response.json({ error: 'id and status are required' }, { status: 400 })
+  if (!VALID_STATUSES.includes(status)) return Response.json({ error: 'Invalid status value' }, { status: 400 })
 
-  const VALID_STATUSES = ['new', 'saved', 'applied', 'skipped']
-  if (!VALID_STATUSES.includes(status)) {
-    return Response.json({ error: 'Invalid status value' }, { status: 400 })
-  }
+  const userId = await getUserId(session.user.email)
+  if (!userId) return Response.json({ error: 'User not found' }, { status: 404 })
 
-  const statuses = await load()
-
+  const supabase = getServiceClient()
   if (status === 'new') {
-    delete statuses[id]
+    const { error } = await supabase.from('statuses').delete().eq('user_id', userId).eq('job_id', id)
+    if (error) console.error('status delete error:', error.message, error.details, error.hint)
   } else {
-    statuses[id] = status
+    const { error } = await supabase.from('statuses').upsert({ user_id: userId, job_id: id, status }, { onConflict: 'user_id,job_id' })
+    if (error) console.error('status upsert error:', error.message, error.details, error.hint)
   }
 
-  await save(statuses)
-  return Response.json(statuses)
+  return Response.json(await getStatusMap(userId))
 }
